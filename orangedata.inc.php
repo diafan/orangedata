@@ -22,12 +22,33 @@ if (!defined('DIAFAN')) {
 
 class Orangedata_inc extends Model {
 
+   /**
+    * @var orangedata\orangedata_client
+    */       
     private $byer;
 
     const CA_CERT = 'cacert.pem';
     const MODULE_NAME = 'orangedata';
 
-    // Получаем по красоте данные из конфига
+    /**
+     * Признак расчета (Число от 1 до 4):
+     *      1 - Приход
+     *      2 - Возврат прихода
+     *      3 - Расход
+     *      4 - Возврат расхода
+     */
+    const ORDER_TYPE = 1;
+
+    /**
+     * Тип оплаты (Число от 1 до 16):
+     *      1 – сумма по чеку наличными, 1031
+     *      2 – сумма по чеку электронными, 1081
+     *      14 – сумма по чеку предоплатой (зачетом аванса и (или) предыдущих платежей), 1215
+     *      15 – сумма по чеку постоплатой (в кредит), 1216
+     *      16 – сумма по чеку (БСО) встречным предоставлением, 1217
+     */
+    const PAYMENT_TYPE = 2;
+
     public function __get($name) {
         return $this->diafan->configmodules($name, self::MODULE_NAME);
     }
@@ -39,7 +60,7 @@ class Orangedata_inc extends Model {
         $path['keys'] = $path['current'] . 'keys' . DIRECTORY_SEPARATOR;
         $path['lib'] = $path['current'] . 'lib' . DIRECTORY_SEPARATOR;
 
-        // TODO: костыль
+        // TODO: для старых версий PHP
         if (!defined('JSON_PRESERVE_ZERO_FRACTION')) {
             define('JSON_PRESERVE_ZERO_FRACTION', 1024);
         }
@@ -56,30 +77,56 @@ class Orangedata_inc extends Model {
         );
     }
 
-    public function test() {
-        // try {
-        /* //create client new order, add positions , add payment, send request
-          $this->byer->create_order('23423423434', 1, 'example@example.com', 1)
-          ->add_position_to_order(6.123456, '10.', 1, 'matches', 1, 10)
-          ->add_position_to_order(7, 10, 1, 'matches2', null, 10)
-          ->add_position_to_order(345., 10.76, 1, 'matches3', 3, null)
-          ->add_payment_to_order(1, 131.23)
-          ->add_payment_to_order(2, 3712.2)
-          ->add_agent_to_order(127, ['+79998887766', '+76667778899'], 'Operation', ['+79998887766'], ['+79998887766'], 'Name', 'ulitsa Adress, dom 7', 3123011520, ['+79998887766', '+76667778899'])
-          ->add_user_attribute('Любимая цитата', 'В здоровом теле здоровый дух, этот лозунг еще не потух!');
-          //view response
-          $result = $this->byer->send_order();
-          if (TRUE === $result) { */
-        //view status of order
-        $order_status = $this->byer->get_order_status(23423423434);
-        var_dump($order_status);
-        // }
-        //} catch (Exception $ex) {
-        //     echo 'Ошибка:' . PHP_EOL . $ex->getMessage();
-        //}
+
+    /**
+     * Конвертирует в float результат работы функции number_format
+     * @param string $number
+     * @return float
+     */
+    private function parse_number($number) {
+        $dec_point = $this->diafan->configmodules("format_price_2", "shop");
+        return floatval(str_replace($dec_point, '.', preg_replace('/[^\d' . preg_quote($dec_point) . ']/', '', $number)));
     }
-    
+
+    /**
+     * Получает e-mail пользователя, оформившего заказ
+     * копия функции из shop/inc/shop.inc.order.php потому что она private
+     * 
+     * @param  integer $order_id
+     * @return string
+     */
+    private function get_email($order_id) {
+        $mail = DB::query_result("SELECT e.value FROM {shop_order_param_element} AS e INNER JOIN 
+			{shop_order_param} AS p ON e.param_id=p.id AND p.trash='0' AND e.trash='0' 
+			WHERE p.type='email' AND e.element_id=%d", $order_id);
+
+        if (!$mail && $user_id = DB::query_result("SELECT user_id FROM {shop_order} WHERE id=%d AND trash='0' LIMIT 1", $order_id)) {
+            $mail = DB::query_result("SELECT mail FROM {users} WHERE id=%d  AND trash='0' LIMIT 1", $user_id);
+        }
+
+        return $mail;
+    }
+
+    /**
+     * Создать чек
+     * @param int $order_id - ид заказа
+     * @return bool
+     */
     public function create_order($order_id) {
+
+        $user_email = $this->get_email($order_id);
+        $info = $this->diafan->_shop->order_get($order_id);
+
+
+        $order = $this->byer->create_order($order_id, self::ORDER_TYPE, $user_email, $this->taxationSystem);
+        foreach ($info['rows'] as $row) {
+            $order->add_position_to_order($row['count'], $this->parse_number($row['price']), $this->tax, $row['name'], null, null);
+        }
+
+        $order->add_payment_to_order(self::PAYMENT_TYPE, $this->parse_number($info['summ']));
+
+        $result = $this->byer->send_order();
+        return (TRUE === $result); // в result может возвратиться HTTP страница целиком...
         
     }
 
