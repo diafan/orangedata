@@ -22,9 +22,9 @@ if (!defined('DIAFAN')) {
 
 class Orangedata_inc extends Model {
 
-   /**
-    * @var orangedata\orangedata_client
-    */       
+    /**
+     * @var orangedata\orangedata_client
+     */
     private $byer;
 
     const CA_CERT = 'cacert.pem';
@@ -77,7 +77,6 @@ class Orangedata_inc extends Model {
         );
     }
 
-
     /**
      * Конвертирует в float результат работы функции number_format
      * @param string $number
@@ -127,7 +126,22 @@ class Orangedata_inc extends Model {
 
         $result = $this->byer->send_order();
         return (TRUE === $result); // в result может возвратиться HTTP страница целиком...
-        
+    }
+
+    public function test() {
+        $return = array('result' => null, 'exception' => null);
+
+        try {
+            $this->byer->create_order(rand(1111, 9999), self::ORDER_TYPE, "test@test.test", $this->taxationSystem)
+                    ->add_position_to_order(1, 1, $this->tax, 'test', null, null)
+                    ->add_payment_to_order(self::PAYMENT_TYPE, 1);
+
+            $return['result'] = $this->byer->send_order();
+        } catch (Exception $ex) {
+            $return['exception'] = $ex->getMessage();
+        }
+
+        return var_export($return, true);
     }
 
 }

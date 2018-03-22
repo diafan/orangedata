@@ -90,6 +90,9 @@ class Orangedata_admin extends Frame_admin {
                     'work' => 'боевой'
                 )
             ),
+            'test' => array(
+                'type' => 'function',
+            ),
         )
     );
 
@@ -100,12 +103,11 @@ class Orangedata_admin extends Frame_admin {
         'config', // файл настроек модуля
     );
 
-    /**
-     * Подготавливает конфигурацию модуля
-     * @return void
-     */
-    public function prepare_config() {
-        
+    public function edit_config_variable_test() {
+        echo '<div class="unit">'
+        . '<p><button class="btn js_btn_test" type="button">' . $this->diafan->_('Создать проверочный чек') . '</button></p>'
+        . '<p><pre id="test_check"></pre></p>'
+        . '</div>';
     }
 
 }
